@@ -1,36 +1,30 @@
 package com.elder.lightroom2birds;
 
-import java.net.URI;
+import java.sql.SQLException;
+import java.util.Date;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.web.client.RestTemplate;
 
-import com.tgelder.birds.Bird;
-import com.tgelder.birds.Photo;
+import com.tgelder.birds.BirdResource;
+import com.tgelder.birds.PhotoResource;
 
 public class Application {
-
+	
     private static final Logger log = LoggerFactory.getLogger(Application.class);
 
-    public static void main(String args[]) {
-        RestTemplate restTemplate = new RestTemplate();
-//        Bird bird = restTemplate.getForObject("http://localhost:8080/birds/2", Bird.class);
-//        log.info(bird.toString());
+    public static void main(String args[]) throws ClassNotFoundException, SQLException {
+
+        Lightroom2Birds lightroom2birds = new Lightroom2Birds();
         
-        Bird bullfinch = new Bird("bullfinch");
+        //BirdResource bullFinch = lightroom2birds.addBird("bullFinch");
+        //PhotoResource jackdaw = lightroom2birds.addPhoto("jackdaw.jpg","Kew Gardens", new Date());
+        //lightroom2birds.setFavourite(bullFinch, jackdaw);
         
-        URI uri = restTemplate.postForLocation("http://localhost:8080/birds/", bullfinch);
+        System.out.println(lightroom2birds.getBirds());
         
-        bullfinch = restTemplate.getForObject(uri, Bird.class);
-        
-        log.info(bullfinch.toString());
-        
-        Photo photo = restTemplate.getForObject("http://localhost:8080/photos/1", Photo.class);
-        
-        bullfinch.setFavourite(photo);
-        
-        restTemplate.put(uri, bullfinch);
+        lightroom2birds.close();
+         
     }
 
 }
