@@ -39,6 +39,11 @@
       		<groupId>org.xerial</groupId>
       		<artifactId>sqlite-jdbc</artifactId>
     	</dependency>
+    	<dependency>
+  			<groupId>com.drewnoakes</groupId>
+  			<artifactId>metadata-extractor</artifactId>
+  			<version>2.10.1</version>
+		</dependency>
 	</dependencies>
 
 

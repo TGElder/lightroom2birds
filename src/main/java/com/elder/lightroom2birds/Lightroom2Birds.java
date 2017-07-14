@@ -7,11 +7,16 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpEntity;
@@ -78,76 +83,227 @@ public class Lightroom2Birds {
 		Photo photo = new Photo(new File(path).getName(),location,timestamp);
         
         URI uri = restTemplate.postForLocation("http://localhost:8080/photos/", photo);
-        
-        uploadPhoto(path);
-        
+                
         return restTemplate.getForObject(uri, PhotoResource.class);
 	}
 	
-	void setFavourite(BirdResource bird, PhotoResource favourite) {
+	void updateBird(BirdResource bird) {
 		
-		bird.getBird().setFavourite(favourite.getPhoto());
 		restTemplate.put(bird.getLink("self").getHref(),bird.getBird());
 	}
+
 	
-	Map<Integer,String> getBirds() throws SQLException {
-		Map<Integer,String> birds = new HashMap<Integer,String> ();
+	Map<Integer,List<String>> getHierarchy(String top) throws SQLException {
 		
 		ResultSet resultSet = statement.executeQuery(
-				   "select k.id_local, k.name"
+				   "select k.id_local"
 				+ " from AGLibraryKeyword k"
-				+ " left join AGLibraryKeyword p"
-				+ " on k.parent = p.id_local"
-				+ " where p.name = 'Bird'"
-				+ " and k.name != 'Unknown'");
+				+ " where k.name = '"+top+"'");
 		
-		
-		String inString = "";
-		String masterInString = "";
-		
-		while(resultSet.next()) {
-			birds.put(resultSet.getInt("id_local"), resultSet.getString("name"));
+		Map<Integer,List<String>> out = new HashMap<> ();
+		List<Integer> open = new ArrayList<> ();
+
+		while (resultSet.next()) {
+			open.add(resultSet.getInt("id_local"));
 		}
 		
-		Map<Integer,String> birds2 = new HashMap<Integer,String> ();
-		
-		for (Map.Entry<Integer, String> bird : birds.entrySet()) {
-								
-			inString = bird.getKey().toString();
+		while (!open.isEmpty()) {
+			Integer parent = open.get(0);			
+			open.remove(0);
 			
-			while (inString.length()>0) {
-				
-				
-				resultSet = statement.executeQuery(
-				    "select k.id_local" +
-					" from AGLibraryKeyword k" +
-					" where k.parent in ("+inString+")");
-				
-				
-				if (masterInString.length()>0) {
-					masterInString += ",";
-				}
-				masterInString += inString;
-				
-				inString = "";
-				
-				while(resultSet.next()) {
-					birds2.put(resultSet.getInt("id_local"), bird.getValue());
-					
-					if (inString.length()>0) {
-						inString += ",";
-					}
-					inString += resultSet.getInt("id_local");
+			List<String> parentLevels = out.get(parent);
+			
+			if (parentLevels==null) {
+				parentLevels = new ArrayList<>();
+			}
 
-				}
+			resultSet = statement.executeQuery(
+					   "select k.id_local, k.name"
+					+ " from AGLibraryKeyword k"
+					+ " where k.parent = "+parent);
+			
+			while(resultSet.next()) {
+				List<String> levels = new ArrayList<> (parentLevels);
+				levels.add(resultSet.getString("name"));
 				
+				out.put(resultSet.getInt("id_local"), levels);
+				
+				open.add(resultSet.getInt("id_local"));
 			}
 			
 		}
-		
-		birds.putAll(birds2);
-		
-		return birds2;
+			
+		return out;
 	}
+	
+	Map<Integer,BirdResource> getBirds() throws SQLException {
+		Map<Integer,BirdResource> out = new HashMap<> ();
+		
+		Map<Integer,List<String>> strings = getHierarchy("Bird");
+		
+		Map<String,BirdResource> birds = new HashMap<> ();
+		
+		for (Map.Entry<Integer, List<String>> stringsEntry: strings.entrySet()) {
+			
+			String birdString = stringsEntry.getValue().get(0);
+			
+			if (!birdString.equals("Unknown")) {
+			
+				BirdResource bird = birds.get(birdString);
+					
+				if (bird==null) {
+					bird = addBird(birdString);
+					birds.put(birdString, bird);
+				}
+			
+				out.put(stringsEntry.getKey(), bird);
+			}
+		
+		}
+		
+		return out;
+		
+	}
+	
+	Collection<PhotoResource> getPhotos(Map<Integer,BirdResource> birds) throws SQLException {
+		
+		String tags = birds.keySet().toString()
+				.replaceAll("\\[", "")
+				.replaceAll("\\]", "");
+		
+		
+		ResultSet resultSet = statement.executeQuery(
+				   "select i.id_local,"
+				+ " lki.tag,"
+				+ " i.captureTime,"
+				+ " lf.baseName,"
+				+ " lf2.pathFromRoot"
+				+ " from AGLibraryKeywordImage lki"
+				+ " inner join AgLibraryCollectionImage lci"
+				+ " on lci.image = lki.image"
+				+ " left join Adobe_images i"
+				+ " on i.id_local = lki.image"
+				+ " left join AgLibraryFile lf"
+				+ " on lf.id_local = i.rootFile"
+				+ " left join AGLibraryFolder lf2"
+				+ " on lf2.id_local = lf.folder"
+				+ " where lki.tag in ("+tags+")"
+				+ " and lci.collection = ("
+				+ "     select id_local"
+				+ "     from AgLibraryCollection"
+				+ "     where name = 'Good'"
+				+ " )"
+				);
+		
+
+		Collection<PhotoRow> rows = new HashSet<PhotoRow> ();
+
+		while (resultSet.next()) {
+			rows.add(new PhotoRow(resultSet));			
+		}
+		
+		Map<Integer,PhotoResource> out = new HashMap<> ();
+				
+		Map<Integer,List<String>> locations = getHierarchy("Location");
+		
+		tags = locations.keySet().toString()
+				.replaceAll("\\[", "")
+				.replaceAll("\\]", "");
+		
+		Collection<PhotoResource> favourites = new HashSet<>();
+		
+		for (PhotoRow row : rows) {
+			
+			PhotoResource photo = out.get(row.image);
+			
+			if (photo==null) {
+				resultSet = statement.executeQuery(
+						  " select k.name"
+						+ " from AGLibraryKeywordImage ki"
+						+ " left join AGLibraryKeyword k"
+						+ " on k.id_local = ki.tag"
+						+ " where ki.tag in ("+tags+")"
+						+ " and ki.image = "+row.image
+						);
+				
+				String location;
+				
+				if (resultSet.next()) {
+					location = resultSet.getString("name");
+				}
+				else {
+					location = "Unknown";
+				}	
+
+				photo = addPhoto(row.baseName,location,row.date);
+				out.put(row.image, photo);
+				
+				resultSet = statement.executeQuery("select *"
+						 + " from AgLibraryCollectionImage lci"
+						 + " where lci.image = "+row.image
+						 + " and lci.collection = ("
+						 + "     select id_local"
+						 + "     from AgLibraryCollection"
+						 + "     where name = 'Favourite Birds'"
+						 + " )"
+						 );
+
+				if (resultSet.next()) {
+					favourites.add(photo);
+					uploadPhoto("/media/thomas/Storage/Documents/Photos/Lightroom/Birds/"
+					+photo.getPhoto().getPath()+".jpg");
+					uploadPhoto("/media/thomas/Storage/Documents/Photos/Lightroom/Birds/"
+					+photo.getPhoto().getPath()+"_thumb.jpg");
+				}
+			}
+			
+			BirdResource bird = birds.get(row.keyword);
+			
+			Set<Photo> birdPhotos = bird.getBird().getPhotos();
+			
+			if (birdPhotos==null) {
+				birdPhotos = new HashSet<Photo> ();
+			}
+			
+			birdPhotos.add(photo.getPhoto());
+			
+			if (favourites.contains(photo)) {
+				bird.getBird().setFavourite(photo.getPhoto());
+			}
+			
+			updateBird(bird);
+					
+		}
+		
+		return out.values();
+
+	}
+	
+	private class PhotoRow {
+		
+		Integer image;
+		Integer keyword;
+		Date date;
+		String baseName;
+		String pathFromRoot;
+		
+		PhotoRow(ResultSet resultSet) throws SQLException {
+			image = resultSet.getInt("id_local");
+			keyword = resultSet.getInt("tag");
+			try {
+				date = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").parse(resultSet.getString("captureTime"));
+			} catch (ParseException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			baseName = resultSet.getString("baseName");
+			pathFromRoot = resultSet.getString("pathFromRoot");
+		}
+		
+		
+	}
+
+	
+	
 	
 }
