@@ -40,7 +40,7 @@ public class Lightroom2Birds {
 	private Connection connection=null;
 	private Statement statement;
 	
-	Lightroom2Birds() throws ClassNotFoundException, SQLException {
+	Lightroom2Birds(String username, String password) throws ClassNotFoundException, SQLException {
 		
 	
 		Class.forName("org.sqlite.JDBC");
@@ -52,7 +52,7 @@ public class Lightroom2Birds {
                  
 		restTemplate.getMessageConverters().add(new ByteArrayHttpMessageConverter());
 		restTemplate.getInterceptors().add(
-	      		  new BasicAuthorizationInterceptor("telder", "whathaburt"));
+	      		  new BasicAuthorizationInterceptor(username,password));
 	}
 
 	void close() throws SQLException {
