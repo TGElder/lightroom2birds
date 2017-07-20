@@ -216,10 +216,8 @@ public class Lightroom2Birds {
 			
 			if (photo==null) {
 				resultSet = statement.executeQuery(
-						  " select k.name"
+						  " select ki.tag"
 						+ " from AGLibraryKeywordImage ki"
-						+ " left join AGLibraryKeyword k"
-						+ " on k.id_local = ki.tag"
 						+ " where ki.tag in ("+tags+")"
 						+ " and ki.image = "+row.image
 						);
@@ -227,7 +225,14 @@ public class Lightroom2Birds {
 				String location;
 				
 				if (resultSet.next()) {
-					location = resultSet.getString("name");
+					
+					int tag = resultSet.getInt("tag");
+					
+					List<String> focusLocations = locations.get(tag);
+					
+					location = focusLocations.get(focusLocations.size()-1);
+					
+					location += ", "+focusLocations.get(focusLocations.size()-2);
 				}
 				else {
 					location = "Unknown";
