@@ -13,8 +13,10 @@ public class Application {
     
     public static void main(String args[]) throws ClassNotFoundException, SQLException {
 
-        Lightroom2Birds lightroom2birds = new Lightroom2Birds(args[0],args[1]);
+    	
+    	Lightroom2Birds lightroom2birds = new Lightroom2Birds(args[0],args[1],args[2],args[3]);
 
+        
         
         lightroom2birds.getPhotos(lightroom2birds.getBirds());
         

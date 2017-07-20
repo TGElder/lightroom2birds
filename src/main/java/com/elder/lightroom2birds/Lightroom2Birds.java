@@ -39,10 +39,15 @@ public class Lightroom2Birds {
 	private final RestTemplate restTemplate = new RestTemplate();
 	private Connection connection=null;
 	private Statement statement;
+	private String urlRoot;
+	private String photoRoot;
 	
-	Lightroom2Birds(String username, String password) throws ClassNotFoundException, SQLException {
+	Lightroom2Birds(String username, String password, String urlRoot, String photoRoot) throws ClassNotFoundException, SQLException {
 		
 	
+		this.urlRoot = urlRoot;
+		this.photoRoot = photoRoot;
+		
 		Class.forName("org.sqlite.JDBC");
 	
 		
@@ -61,28 +66,21 @@ public class Lightroom2Birds {
 		}
 	}
 	
-	private void uploadPhoto(String path) {
-
-		MultiValueMap<String, Object> params = new LinkedMultiValueMap<String, Object>();
-		params.add("file", new FileSystemResource(path));
-		HttpHeaders httpHeaders = new HttpHeaders();
-		httpHeaders.setContentType(MediaType.MULTIPART_FORM_DATA);
-		HttpEntity requestEntity = new HttpEntity<>(params, httpHeaders);
-		restTemplate.exchange("http://localhost:8080/files", HttpMethod.POST, requestEntity, String.class);
-	}
 	
 	BirdResource addBird(String name) {
 		Bird bird = new Bird(name);
+        				
+        URI uri = restTemplate.postForLocation(urlRoot+"/birds/", bird);
         
-        URI uri = restTemplate.postForLocation("http://localhost:8080/birds/", bird);
+       
         
         return restTemplate.getForObject(uri, BirdResource.class);
 	}
 	
 	PhotoResource addPhoto(String path, String location, Date timestamp) {
-		Photo photo = new Photo(new File(path).getName(),location,timestamp);
+		Photo photo = new Photo(path,location,timestamp);
         
-        URI uri = restTemplate.postForLocation("http://localhost:8080/photos/", photo);
+        URI uri = restTemplate.postForLocation(urlRoot+"/photos/", photo);
                 
         return restTemplate.getForObject(uri, PhotoResource.class);
 	}
@@ -234,8 +232,11 @@ public class Lightroom2Birds {
 				else {
 					location = "Unknown";
 				}	
-
-				photo = addPhoto(row.baseName,location,row.date);
+				
+				photo = addPhoto(photoRoot+row.baseName,location,row.date);
+				
+				
+				
 				out.put(row.image, photo);
 				
 				resultSet = statement.executeQuery("select *"
@@ -250,10 +251,6 @@ public class Lightroom2Birds {
 
 				if (resultSet.next()) {
 					favourites.add(photo);
-					uploadPhoto("/media/thomas/Storage/Documents/Photos/Lightroom/Birds/"
-					+photo.getPhoto().getPath()+".jpg");
-					uploadPhoto("/media/thomas/Storage/Documents/Photos/Lightroom/Birds/"
-					+photo.getPhoto().getPath()+"_thumb.jpg");
 				}
 			}
 			
